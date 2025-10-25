@@ -12,23 +12,28 @@ import com.example.mycity.pages.WelcomePage
 
 
 @Composable
-fun MyAppNavigation(modifier: Modifier = Modifier,authViewModel: AuthViewModel) {
+fun MyAppNavigation(modifier: Modifier = Modifier, authViewModel: AuthViewModel) {
     val navController = rememberNavController()
 
-    NavHost(navController = navController, startDestination = "welcome", builder = {
-        composable("welcome"){
-            WelcomePage(modifier,navController)
+    NavHost(navController = navController, startDestination = "welcome", modifier = modifier) {
+        composable("welcome") { WelcomePage(modifier, navController) }
+        composable("login")   { LoginPage(modifier, navController, authViewModel) }
+        composable("signup")  { SignupPage(modifier, navController, authViewModel) }
+        composable("home")    { HomePage(modifier, navController, authViewModel) }
+
+        // NIEUW:
+        composable("addCity") {
+            com.example.mycity.ui.screens.AddCityScreen(
+                onCityAdded = { navController.popBackStack() }
+            )
         }
 
-        composable("login"){
-            LoginPage(modifier,navController,authViewModel)
+        composable("cities") {
+            com.example.mycity.ui.screens.CitiesListScreen()
         }
-        composable("signup"){
-            SignupPage(modifier,navController,authViewModel)
-        }
-        composable("home"){
-            HomePage(modifier,navController,authViewModel)
-        }
-    })
+
+
+    }
 }
+
 

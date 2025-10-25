@@ -1,60 +1,126 @@
 package com.example.mycity.pages
 
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.material3.Button
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.livedata.observeAsState
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.example.mycity.AuthState
 import com.example.mycity.AuthViewModel
+import com.example.mycity.viewmodel.CityViewModel
 
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomePage(modifier: Modifier = Modifier, navController: NavController, authViewModel: AuthViewModel) {
+fun HomePage(
+    modifier: Modifier = Modifier,
+    navController: NavController,
+    authViewModel: AuthViewModel
+) {
+    val cityViewModel: CityViewModel = viewModel()
+    val cities by cityViewModel.cities.collectAsState()
+    val isLoading by cityViewModel.isLoading.collectAsState()
+    val error by cityViewModel.error.collectAsState()
 
-    val authState = authViewModel.authState.observeAsState()
-
-    LaunchedEffect(authState.value) {
-        when(authState.value){
-            is AuthState.Unauthenticated -> navController.navigate("login")
-            else -> Unit
-        }
+    LaunchedEffect(Unit) {
+        cityViewModel.loadCities()
     }
 
-    Column(
-        modifier = modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text(text = "Home Page", fontSize = 32.sp)
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Button(onClick = { navController.navigate("addCity") }) {
-            Text(text = "Add City")
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("My Cities") },
+                actions = {
+                    IconButton(onClick = {
+                        authViewModel.signout()
+                        navController.navigate("welcome") {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    }) {
+                        Text("Logout")
+                    }
+                }
+            )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { navController.navigate("addCity") }
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Add City")
+            }
         }
-        Button(onClick = { navController.navigate("cities") }) {
-            Text(text = "View All Cities")
-        }
-
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        TextButton(onClick = {
-            authViewModel.signout()
-        }) {
-            Text(text = "Sign out")
+    ) { padding ->
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
+            when {
+                isLoading && cities.isEmpty() -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+                error != null -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = error ?: "Unknown error",
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+                cities.isEmpty() -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("No cities yet. Add your first city!")
+                    }
+                }
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(cities) { city ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                elevation = CardDefaults.cardElevation(2.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(16.dp)
+                                ) {
+                                    Text(
+                                        text = city.name,
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                    if (city.country.isNotBlank()) {
+                                        Text(
+                                            text = city.country,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

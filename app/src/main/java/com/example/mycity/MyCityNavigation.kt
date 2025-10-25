@@ -10,7 +10,6 @@ import com.example.mycity.pages.LoginPage
 import com.example.mycity.pages.SignupPage
 import com.example.mycity.pages.WelcomePage
 
-
 @Composable
 fun MyAppNavigation(modifier: Modifier = Modifier, authViewModel: AuthViewModel) {
     val navController = rememberNavController()
@@ -21,19 +20,14 @@ fun MyAppNavigation(modifier: Modifier = Modifier, authViewModel: AuthViewModel)
         composable("signup")  { SignupPage(modifier, navController, authViewModel) }
         composable("home")    { HomePage(modifier, navController, authViewModel) }
 
-        // NIEUW:
         composable("addCity") {
             com.example.mycity.ui.screens.AddCityScreen(
-                onCityAdded = { navController.popBackStack() }
+                onCityAdded = {
+                    navController.navigate("home") {
+                        popUpTo("addCity") { inclusive = true }
+                    }
+                }
             )
         }
-
-        composable("cities") {
-            com.example.mycity.ui.screens.CitiesListScreen()
-        }
-
-
     }
 }
-
-

@@ -29,5 +29,18 @@ fun MyAppNavigation(modifier: Modifier = Modifier, authViewModel: AuthViewModel)
                 }
             )
         }
+
+        composable("places/{cityId}/{cityName}") { backStackEntry ->
+            val cityId = backStackEntry.arguments?.getString("cityId") ?: ""
+            val cityName = backStackEntry.arguments?.getString("cityName") ?: ""
+            com.example.mycity.ui.screens.PlacesScreen(
+                cityId = cityId,
+                cityName = cityName,
+                modifier = modifier,
+                onNavigateBack = {
+                    navController.navigateUp()
+                }
+            )
+        }
     }
 }

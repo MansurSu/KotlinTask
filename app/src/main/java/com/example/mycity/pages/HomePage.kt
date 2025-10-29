@@ -96,8 +96,12 @@ fun HomePage(
                     ) {
                         items(cities) { city ->
                             Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                elevation = CardDefaults.cardElevation(2.dp)
+                                modifier = Modifier
+                                    .fillMaxWidth(),
+                                elevation = CardDefaults.cardElevation(2.dp),
+                                onClick = {
+                                    navController.navigate("places/${city.id}/${city.name}")
+                                }
                             ) {
                                 Column(
                                     modifier = Modifier

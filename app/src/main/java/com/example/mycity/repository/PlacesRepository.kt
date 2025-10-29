@@ -34,6 +34,8 @@ class PlacesRepository {
                         description = doc.getString("description").orEmpty(),
                         category = doc.getString("category").orEmpty(),
                         photoBase64 = doc.getString("photoBase64").orEmpty(),
+                        rating = doc.getDouble("rating")?.toFloat() ?: 0f,
+                        comment = doc.getString("comment").orEmpty(),
                         createdAt = doc.getLong("createdAt") ?: 0L
                     )
                 } ?: emptyList()
@@ -61,6 +63,8 @@ class PlacesRepository {
                 "description" to place.description,
                 "category" to place.category,
                 "photoBase64" to photoBase64,
+                "rating" to place.rating,
+                "comment" to place.comment,
                 "createdAt" to System.currentTimeMillis()
             )
 

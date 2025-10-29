@@ -1,8 +1,12 @@
 package com.example.mycity.viewmodel
 
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.mycity.model.City
+import com.example.mycity.model.Place
+import com.example.mycity.repository.PlacesRepository
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -13,11 +17,15 @@ import kotlinx.coroutines.tasks.await
 
 class CityViewModel(
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance(),
-    private val auth: FirebaseAuth = FirebaseAuth.getInstance()
+    private val auth: FirebaseAuth = FirebaseAuth.getInstance(),
+    private val placesRepository: PlacesRepository = PlacesRepository()
 ) : ViewModel() {
 
     private val _cities = MutableStateFlow<List<City>>(emptyList())
     val cities: StateFlow<List<City>> = _cities
+
+    private val _places = MutableStateFlow<List<Place>>(emptyList())
+    val places: StateFlow<List<Place>> = _places
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading
@@ -92,4 +100,27 @@ class CityViewModel(
             }
         }
     }
+
+    fun loadPlaces(cityId: String) {
+        viewModelScope.launch {
+            placesRepository.getPlaces(cityId).collect { placesList ->
+                _places.value = placesList
+            }
+        }
+    }
+
+    fun addPlace(cityId: String, place: Place, photoUri: Uri?, context: Context) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            placesRepository.addPlace(cityId, place, photoUri, context)
+                .onSuccess {
+                    loadPlaces(cityId)
+                }
+                .onFailure { e ->
+                    _error.value = e.message
+                }
+            _isLoading.value = false
+        }
+    }
+
 }

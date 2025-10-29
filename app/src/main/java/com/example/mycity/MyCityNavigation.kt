@@ -9,6 +9,7 @@ import com.example.mycity.pages.HomePage
 import com.example.mycity.pages.LoginPage
 import com.example.mycity.pages.SignupPage
 import com.example.mycity.pages.WelcomePage
+import com.example.mycity.pages.PlacesScreen
 
 @Composable
 fun MyAppNavigation(modifier: Modifier = Modifier, authViewModel: AuthViewModel) {
@@ -27,6 +28,17 @@ fun MyAppNavigation(modifier: Modifier = Modifier, authViewModel: AuthViewModel)
                         popUpTo("addCity") { inclusive = true }
                     }
                 }
+            )
+        }
+
+        composable("places/{cityId}/{cityName}") { backStackEntry ->
+            val cityId = backStackEntry.arguments?.getString("cityId") ?: ""
+            val cityName = backStackEntry.arguments?.getString("cityName") ?: ""
+
+            PlacesScreen(
+                cityId = cityId,
+                cityName = cityName,
+                modifier = modifier
             )
         }
     }

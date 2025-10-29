@@ -54,11 +54,13 @@ dependencies {
     implementation(libs.firebase.auth)
     implementation(libs.androidx.compose.runtime.livedata)
     implementation(libs.androidx.material3)
+    implementation("io.coil-kt:coil-compose:2.5.0")
 
     // Firebase Firestore
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-firestore-ktx")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
+    implementation("com.google.firebase:firebase-storage-ktx:20.3.0")
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

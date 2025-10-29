@@ -1,5 +1,6 @@
 package com.example.mycity.pages
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -96,7 +97,11 @@ fun HomePage(
                     ) {
                         items(cities) { city ->
                             Card(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        navController.navigate("places/${city.id}/${city.name}")
+                                    },
                                 elevation = CardDefaults.cardElevation(2.dp)
                             ) {
                                 Column(

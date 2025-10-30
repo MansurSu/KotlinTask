@@ -31,7 +31,21 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.mycity.model.Place
 import com.example.mycity.utils.ImageUtils
 import com.example.mycity.viewmodel.PlacesViewModel
+import kotlin.text.category
 import kotlin.text.toInt
+import android.Manifest
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.viewModelScope
+import com.example.mycity.ui.components.MapPickLocationDialog
+import com.example.mycity.utils.LocationUtils
+import kotlinx.coroutines.launch
+import org.osmdroid.config.Configuration
+import org.osmdroid.tileprovider.tilesource.TileSourceFactory
+import org.osmdroid.util.GeoPoint
+import org.osmdroid.views.MapView
+import org.osmdroid.views.overlay.Marker
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,9 +61,15 @@ fun PlacesScreen(
 
     var showAddDialog by remember { mutableStateOf(false) }
     var expandedDropdown by remember { mutableStateOf(false) }
+    val context = LocalContext.current
 
     LaunchedEffect(cityId) {
         viewModel.loadPlaces(cityId)
+    }
+
+    DisposableEffect(Unit) {
+        Configuration.getInstance().userAgentValue = context.packageName
+        onDispose { }
     }
 
     Scaffold(
@@ -121,6 +141,64 @@ fun PlacesScreen(
                 }
             }
 
+            // Map showing all places
+            if (places.isNotEmpty()) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(250.dp)
+                        .padding(horizontal = 16.dp),
+                    elevation = CardDefaults.cardElevation(4.dp)
+                ) {
+                    AndroidView(
+                        factory = { ctx ->
+                            MapView(ctx).apply {
+                                setTileSource(TileSourceFactory.MAPNIK)
+                                setMultiTouchControls(true)
+
+                                // Add markers for all places
+                                places.forEach { place ->
+                                    if (place.lat != 0.0 && place.lng != 0.0) {
+                                        val marker = Marker(this).apply {
+                                            position = GeoPoint(place.lat, place.lng)
+                                            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                                            title = place.name
+                                            snippet = "${place.category} - ${place.rating}★"
+                                        }
+                                        overlays.add(marker)
+                                    }
+                                }
+
+                                // Center map on first place or default
+                                val firstPlace = places.firstOrNull { it.lat != 0.0 && it.lng != 0.0 }
+                                if (firstPlace != null) {
+                                    controller.setZoom(12.0)
+                                    controller.setCenter(GeoPoint(firstPlace.lat, firstPlace.lng))
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxSize(),
+                        update = { mapView ->
+                            mapView.overlays.clear()
+                            places.forEach { place ->
+                                if (place.lat != 0.0 && place.lng != 0.0) {
+                                    val marker = Marker(mapView).apply {
+                                        position = GeoPoint(place.lat, place.lng)
+                                        setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
+                                        title = place.name
+                                        snippet = "${place.category} - ${place.rating}★"
+                                    }
+                                    mapView.overlays.add(marker)
+                                }
+                            }
+                            mapView.invalidate()
+                        }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+
             // Places List
             if (places.isEmpty()) {
                 Box(
@@ -158,6 +236,7 @@ fun PlacesScreen(
         )
     }
 }
+
 
 @Composable
 fun PlaceCard(place: Place) {
@@ -263,14 +342,50 @@ fun AddPlaceDialog(
     var rating by remember { mutableStateOf(0f) }
     var comment by remember { mutableStateOf("") }
     var photoUri by remember { mutableStateOf<Uri?>(null) }
+    var lat by remember { mutableStateOf("") }
+    var lng by remember { mutableStateOf("") }
+    var useCurrentLocation by remember { mutableStateOf(false) }
+    var showMapPicker by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val isLoading by viewModel.isLoading.collectAsState()
+
+    // Permission launcher
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            // Get location
+            viewModel.viewModelScope.launch {
+                val location = LocationUtils.getCurrentLatLng(context)
+                location?.let {
+                    lat = it.latitude.toString()
+                    lng = it.longitude.toString()
+                }
+            }
+        } else {
+            Toast.makeText(context, "Location permission denied", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         photoUri = uri
+    }
+
+    if (showMapPicker) {
+        MapPickLocationDialog(
+            initialLat = lat.toDoubleOrNull() ?: 52.0,
+            initialLng = lng.toDoubleOrNull() ?: 5.0,
+            onLocationSelected = { selectedLat, selectedLng ->
+                lat = selectedLat.toString()
+                lng = selectedLng.toString()
+                showMapPicker = false
+            },
+            onDismiss = { showMapPicker = false }
+        )
+        return
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -283,7 +398,8 @@ fun AddPlaceDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(24.dp),
+                    .padding(24.dp)
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
@@ -304,7 +420,7 @@ fun AddPlaceDialog(
                 OutlinedTextField(
                     value = category,
                     onValueChange = { category = it },
-                    label = { Text("Category (e.g., Restaurant, Museum)") },
+                    label = { Text("Category") },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isLoading
                 )
@@ -323,18 +439,80 @@ fun AddPlaceDialog(
                 OutlinedTextField(
                     value = comment,
                     onValueChange = { comment = it },
-                    label = { Text("Comment (optional)") },
+                    label = { Text("Comment") },
                     modifier = Modifier.fillMaxWidth(),
                     maxLines = 3,
                     enabled = !isLoading
                 )
+
+                // Location Section
+                Text(
+                    text = "Location",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Switch(
+                        checked = useCurrentLocation,
+                        onCheckedChange = {
+                            useCurrentLocation = it
+                            if (it) {
+                                if (LocationUtils.hasLocationPermission(context)) {
+                                    viewModel.viewModelScope.launch {
+                                        val location = LocationUtils.getCurrentLatLng(context)
+                                        location?.let {
+                                            lat = it.latitude.toString()
+                                            lng = it.longitude.toString()
+                                        }
+                                    }
+                                } else {
+                                    locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+                                }
+                            }
+                        },
+                        enabled = !isLoading
+                    )
+                    Text("Use my current location")
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = lat,
+                        onValueChange = { lat = it },
+                        label = { Text("Latitude") },
+                        modifier = Modifier.weight(1f),
+                        enabled = !isLoading && !useCurrentLocation
+                    )
+                    OutlinedTextField(
+                        value = lng,
+                        onValueChange = { lng = it },
+                        label = { Text("Longitude") },
+                        modifier = Modifier.weight(1f),
+                        enabled = !isLoading && !useCurrentLocation
+                    )
+                }
+
+                Button(
+                    onClick = { showMapPicker = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isLoading
+                ) {
+                    Text("Pick location on map")
+                }
 
                 Button(
                     onClick = { imagePickerLauncher.launch("image/*") },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !isLoading
                 ) {
-                    Text(if (photoUri != null) "Photo Selected ✓" else "Pick Photo (Optional)")
+                    Text(if (photoUri != null) "Photo Selected ✓" else "Pick Photo")
                 }
 
                 Row(
@@ -351,12 +529,18 @@ fun AddPlaceDialog(
 
                     Button(
                         onClick = {
-                            if (name.isNotBlank() && category.isNotBlank()) {
+                            val latitude = lat.toDoubleOrNull()
+                            val longitude = lng.toDoubleOrNull()
+
+                            if (name.isNotBlank() && category.isNotBlank() &&
+                                latitude != null && longitude != null) {
                                 val place = Place(
                                     name = name,
                                     category = category,
                                     rating = rating,
-                                    comment = comment
+                                    comment = comment,
+                                    lat = latitude,
+                                    lng = longitude
                                 )
 
                                 viewModel.addPlace(
@@ -364,17 +548,21 @@ fun AddPlaceDialog(
                                     place = place,
                                     photoUri = photoUri,
                                     context = context,
-                                    onSuccess = {
-                                        onDismiss() // Sluit dialog direct na succes
-                                    },
+                                    onSuccess = { onDismiss() },
                                     onError = { error ->
                                         Toast.makeText(context, error, Toast.LENGTH_SHORT).show()
                                     }
                                 )
+                            } else {
+                                Toast.makeText(
+                                    context,
+                                    "Please fill all required fields",
+                                    Toast.LENGTH_SHORT
+                                ).show()
                             }
                         },
                         modifier = Modifier.weight(1f),
-                        enabled = !isLoading && name.isNotBlank() && category.isNotBlank()
+                        enabled = !isLoading
                     ) {
                         if (isLoading) {
                             CircularProgressIndicator(
@@ -391,3 +579,4 @@ fun AddPlaceDialog(
         }
     }
 }
+

@@ -3,16 +3,18 @@ package com.example.mycity.repository
 import android.content.Context
 import android.net.Uri
 import com.example.mycity.model.Place
-import com.example.mycity.utils.ImageUtils
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
+import java.util.UUID
 
 class PlacesRepository {
     private val firestore = FirebaseFirestore.getInstance()
+    private val storage = FirebaseStorage.getInstance()
 
     fun getPlaces(cityId: String): Flow<List<Place>> = callbackFlow {
         val listenerRegistration = firestore
@@ -31,11 +33,13 @@ class PlacesRepository {
                         id = doc.id,
                         cityId = cityId,
                         name = doc.getString("name").orEmpty(),
-                        description = doc.getString("description").orEmpty(),
                         category = doc.getString("category").orEmpty(),
-                        photoBase64 = doc.getString("photoBase64").orEmpty(),
+                        lat = doc.getDouble("lat") ?: 0.0,
+                        lng = doc.getDouble("lng") ?: 0.0,
                         rating = doc.getDouble("rating")?.toFloat() ?: 0f,
                         comment = doc.getString("comment").orEmpty(),
+                        photoUrl = doc.getString("photoUrl").orEmpty(),
+                        photoBase64 = doc.getString("photoBase64").orEmpty(),
                         createdAt = doc.getLong("createdAt") ?: 0L
                     )
                 } ?: emptyList()
@@ -53,18 +57,18 @@ class PlacesRepository {
         context: Context
     ): Result<String> {
         return try {
-            val photoBase64 = photoUri?.let {
-                ImageUtils.uriToBase64(context, it)
-            } ?: ""
+            // Upload photo if provided
+            val photoUrl = photoUri?.let { uploadPhoto(cityId, it) } ?: ""
 
             val placeData = hashMapOf(
                 "cityId" to cityId,
                 "name" to place.name,
-                "description" to place.description,
                 "category" to place.category,
-                "photoBase64" to photoBase64,
+                "lat" to place.lat,
+                "lng" to place.lng,
                 "rating" to place.rating,
                 "comment" to place.comment,
+                "photoUrl" to photoUrl,
                 "createdAt" to System.currentTimeMillis()
             )
 
@@ -79,5 +83,65 @@ class PlacesRepository {
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    suspend fun updatePlace(
+        cityId: String,
+        placeId: String,
+        place: Place,
+        photoUri: Uri?
+    ): Result<Unit> {
+        return try {
+            val photoUrl = photoUri?.let { uploadPhoto(cityId, it) } ?: place.photoUrl
+
+            val updates = hashMapOf(
+                "name" to place.name,
+                "category" to place.category,
+                "lat" to place.lat,
+                "lng" to place.lng,
+                "rating" to place.rating,
+                "comment" to place.comment,
+                "photoUrl" to photoUrl
+            )
+
+            firestore
+                .collection("cities")
+                .document(cityId)
+                .collection("places")
+                .document(placeId)
+                .update(updates as Map<String, Any>)
+                .await()
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun deletePlace(cityId: String, placeId: String): Result<Unit> {
+        return try {
+            firestore
+                .collection("cities")
+                .document(cityId)
+                .collection("places")
+                .document(placeId)
+                .delete()
+                .await()
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    private suspend fun uploadPhoto(cityId: String, uri: Uri): String {
+        val fileName = "${UUID.randomUUID()}.jpg"
+        val storageRef = storage.reference
+            .child("places")
+            .child(cityId)
+            .child(fileName)
+
+        storageRef.putFile(uri).await()
+        return storageRef.downloadUrl.await().toString()
     }
 }

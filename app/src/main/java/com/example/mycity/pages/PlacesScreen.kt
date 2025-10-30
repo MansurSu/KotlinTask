@@ -46,6 +46,8 @@ import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
+import kotlin.text.toInt
+import kotlin.toString
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -346,16 +348,52 @@ fun AddPlaceDialog(
     var lng by remember { mutableStateOf("") }
     var useCurrentLocation by remember { mutableStateOf(false) }
     var showMapPicker by remember { mutableStateOf(false) }
+    var showPhotoOptions by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val isLoading by viewModel.isLoading.collectAsState()
 
-    // Permission launcher
+    // Image picker launcher
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        photoUri = uri
+    }
+
+    // Camera launcher
+    val cameraUri = remember {
+        val file = java.io.File(context.cacheDir, "camera_${System.currentTimeMillis()}.jpg")
+        androidx.core.content.FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            file
+        )
+    }
+
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success) {
+            photoUri = cameraUri
+        }
+    }
+
+    // Camera permission launcher
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            cameraLauncher.launch(cameraUri)
+        } else {
+            Toast.makeText(context, "Camera permission denied", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // Location permission launcher
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
-            // Get location
             viewModel.viewModelScope.launch {
                 val location = LocationUtils.getCurrentLatLng(context)
                 location?.let {
@@ -366,12 +404,6 @@ fun AddPlaceDialog(
         } else {
             Toast.makeText(context, "Location permission denied", Toast.LENGTH_SHORT).show()
         }
-    }
-
-    val imagePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        photoUri = uri
     }
 
     if (showMapPicker) {
@@ -507,12 +539,47 @@ fun AddPlaceDialog(
                     Text("Pick location on map")
                 }
 
-                Button(
-                    onClick = { imagePickerLauncher.launch("image/*") },
+                // Photo Section
+                Text(
+                    text = "Photo",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    enabled = !isLoading
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(if (photoUri != null) "Photo Selected ✓" else "Pick Photo")
+                    Button(
+                        onClick = { imagePickerLauncher.launch("image/*") },
+                        modifier = Modifier.weight(1f),
+                        enabled = !isLoading
+                    ) {
+                        Text("Gallery")
+                    }
+
+                    Button(
+                        onClick = {
+                            if (context.checkSelfPermission(Manifest.permission.CAMERA) ==
+                                android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                                cameraLauncher.launch(cameraUri)
+                            } else {
+                                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        enabled = !isLoading
+                    ) {
+                        Text("Camera")
+                    }
+                }
+
+                if (photoUri != null) {
+                    Text(
+                        text = "✓ Photo selected",
+                        color = Color(0xFF4CAF50),
+                        fontSize = 14.sp
+                    )
                 }
 
                 Row(

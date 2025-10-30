@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import java.util.UUID
 
 class CityViewModel(
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance(),
@@ -82,13 +83,17 @@ class CityViewModel(
             _isLoading.value = true
             try {
                 val uid = auth.currentUser?.uid.orEmpty()
+                val cityId = UUID.randomUUID().toString()
                 val data = hashMapOf(
                     "name" to name.trim(),
                     "country" to country?.trim().orEmpty(),
                     "createdByUid" to uid,
                     "createdAt" to System.currentTimeMillis()
                 )
-                firestore.collection("cities").add(data).await()
+                firestore.collection("cities")
+                    .document(cityId)
+                    .set(data)
+                    .await()
                 _error.value = null
                 onSuccess()
             } catch (e: Exception) {
@@ -100,6 +105,7 @@ class CityViewModel(
             }
         }
     }
+
 
     fun loadPlaces(cityId: String) {
         viewModelScope.launch {

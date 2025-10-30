@@ -3,6 +3,7 @@ package com.example.mycity.repository
 import android.content.Context
 import android.net.Uri
 import com.example.mycity.model.Place
+import com.example.mycity.utils.ImageUtils
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.storage.FirebaseStorage
@@ -11,6 +12,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 import java.util.UUID
+import kotlin.text.category
 
 class PlacesRepository {
     private val firestore = FirebaseFirestore.getInstance()
@@ -57,8 +59,10 @@ class PlacesRepository {
         context: Context
     ): Result<String> {
         return try {
-            // Upload photo if provided
-            val photoUrl = photoUri?.let { uploadPhoto(cityId, it) } ?: ""
+            // Convert photo to Base64 instead of uploading to Storage
+            val photoBase64 = photoUri?.let {
+                ImageUtils.uriToBase64(context, it)
+            } ?: ""
 
             val placeData = hashMapOf(
                 "cityId" to cityId,
@@ -68,7 +72,8 @@ class PlacesRepository {
                 "lng" to place.lng,
                 "rating" to place.rating,
                 "comment" to place.comment,
-                "photoUrl" to photoUrl,
+                "photoBase64" to photoBase64, // Use Base64
+                "photoUrl" to "", // Empty string
                 "createdAt" to System.currentTimeMillis()
             )
 
@@ -85,14 +90,18 @@ class PlacesRepository {
         }
     }
 
+
     suspend fun updatePlace(
         cityId: String,
         placeId: String,
         place: Place,
-        photoUri: Uri?
+        photoUri: Uri?,
+        context: Context
     ): Result<Unit> {
         return try {
-            val photoUrl = photoUri?.let { uploadPhoto(cityId, it) } ?: place.photoUrl
+            val photoBase64 = photoUri?.let {
+                ImageUtils.uriToBase64(context, it)
+            } ?: place.photoBase64
 
             val updates = hashMapOf(
                 "name" to place.name,
@@ -101,7 +110,7 @@ class PlacesRepository {
                 "lng" to place.lng,
                 "rating" to place.rating,
                 "comment" to place.comment,
-                "photoUrl" to photoUrl
+                "photoBase64" to photoBase64
             )
 
             firestore
@@ -117,6 +126,7 @@ class PlacesRepository {
             Result.failure(e)
         }
     }
+
 
     suspend fun deletePlace(cityId: String, placeId: String): Result<Unit> {
         return try {
@@ -134,14 +144,4 @@ class PlacesRepository {
         }
     }
 
-    private suspend fun uploadPhoto(cityId: String, uri: Uri): String {
-        val fileName = "${UUID.randomUUID()}.jpg"
-        val storageRef = storage.reference
-            .child("places")
-            .child(cityId)
-            .child(fileName)
-
-        storageRef.putFile(uri).await()
-        return storageRef.downloadUrl.await().toString()
-    }
 }

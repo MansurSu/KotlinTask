@@ -53,7 +53,7 @@ fun MapPickLocationDialog(
                             MapView(ctx).apply {
                                 setTileSource(TileSourceFactory.MAPNIK)
                                 setMultiTouchControls(true)
-                                controller.setZoom(13.0)
+                                controller.setZoom(18.5)
                                 controller.setCenter(GeoPoint(initialLat, initialLng))
 
                                 val marker = Marker(this).apply {

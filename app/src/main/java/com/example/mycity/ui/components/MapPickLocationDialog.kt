@@ -16,6 +16,8 @@ import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
+import org.osmdroid.events.MapEventsReceiver
+import org.osmdroid.views.overlay.MapEventsOverlay
 
 @Composable
 fun MapPickLocationDialog(
@@ -53,6 +55,7 @@ fun MapPickLocationDialog(
                             MapView(ctx).apply {
                                 setTileSource(TileSourceFactory.MAPNIK)
                                 setMultiTouchControls(true)
+
                                 controller.setZoom(18.5)
                                 controller.setCenter(GeoPoint(initialLat, initialLng))
 
@@ -60,6 +63,8 @@ fun MapPickLocationDialog(
                                     position = GeoPoint(initialLat, initialLng)
                                     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                                     isDraggable = true
+                                    title = "Geselecteerde locatie"
+
                                     setOnMarkerDragListener(object : Marker.OnMarkerDragListener {
                                         override fun onMarkerDrag(marker: Marker?) {}
                                         override fun onMarkerDragEnd(marker: Marker?) {
@@ -71,6 +76,29 @@ fun MapPickLocationDialog(
                                         override fun onMarkerDragStart(marker: Marker?) {}
                                     })
                                 }
+
+                                val mapEventsReceiver = object : MapEventsReceiver {
+                                    override fun singleTapConfirmedHelper(p: GeoPoint?): Boolean {
+                                        p?.let { point ->
+                                            // Update de state variabelen
+                                            selectedLat = point.latitude
+                                            selectedLng = point.longitude
+
+                                            marker.position = point
+
+                                            invalidate()
+                                        }
+                                        return true
+                                    }
+
+                                    override fun longPressHelper(p: GeoPoint?): Boolean {
+                                        return false
+                                    }
+                                }
+
+                                val eventsOverlay = MapEventsOverlay(mapEventsReceiver)
+                                overlays.add(eventsOverlay)
+
                                 overlays.add(marker)
                             }
                         },

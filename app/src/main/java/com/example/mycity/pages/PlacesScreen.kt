@@ -333,6 +333,7 @@ fun PlaceCard(place: Place) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddPlaceDialog(
     cityId: String,
@@ -340,12 +341,16 @@ fun AddPlaceDialog(
     onDismiss: () -> Unit
 ) {
     var name by remember { mutableStateOf("") }
-    val categories = listOf("Restaurant", "Monument", "Park", "Winkel", "Bar", "Museum", "Woonzorgcentrum", "Space-station","Anders")
+
+    val categories = listOf("Restaurant", "Monument", "Park", "Winkel", "Bar", "Anders")
     var category by remember { mutableStateOf(categories.first()) }
     var expandedCategory by remember { mutableStateOf(false) }
+
     var rating by remember { mutableStateOf(0f) }
     var comment by remember { mutableStateOf("") }
     var photoUri by remember { mutableStateOf<Uri?>(null) }
+
+    // Lat/Lng logica behouden...
     var lat by remember { mutableStateOf("") }
     var lng by remember { mutableStateOf("") }
     var useCurrentLocation by remember { mutableStateOf(false) }
@@ -354,63 +359,40 @@ fun AddPlaceDialog(
     val context = LocalContext.current
     val isLoading by viewModel.isLoading.collectAsState()
 
-    // Image picker launcher
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        photoUri = uri
-    }
+    ) { uri: Uri? -> photoUri = uri }
 
-    // Camera launcher
     val cameraUri = remember {
         val file = java.io.File(context.cacheDir, "camera_${System.currentTimeMillis()}.jpg")
         androidx.core.content.FileProvider.getUriForFile(
-            context,
-            "${context.packageName}.fileprovider",
-            file
+            context, "${context.packageName}.fileprovider", file
         )
     }
 
     val cameraLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.TakePicture()
-    ) { success ->
-        if (success) {
-            photoUri = cameraUri
-        }
-    }
+    ) { success -> if (success) photoUri = cameraUri }
 
-    // Camera permission launcher
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            cameraLauncher.launch(cameraUri)
-        } else {
-            Toast.makeText(context, "Camera permission denied", Toast.LENGTH_SHORT).show()
-        }
-    }
+    ) { isGranted -> if (isGranted) cameraLauncher.launch(cameraUri) }
 
-    // Location permission launcher
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
             viewModel.viewModelScope.launch {
                 val location = LocationUtils.getCurrentLatLng(context)
-                location?.let {
-                    lat = it.latitude.toString()
-                    lng = it.longitude.toString()
-                }
+                location?.let { lat = it.latitude.toString(); lng = it.longitude.toString() }
             }
-        } else {
-            Toast.makeText(context, "Location permission denied", Toast.LENGTH_SHORT).show()
         }
     }
 
     if (showMapPicker) {
         MapPickLocationDialog(
-            initialLat = lat.toDoubleOrNull() ?: 52.0,
-            initialLng = lng.toDoubleOrNull() ?: 5.0,
+            initialLat = lat.toDoubleOrNull() ?: 51.2,
+            initialLng = lng.toDoubleOrNull() ?: 4.4,
             onLocationSelected = { selectedLat, selectedLng ->
                 lat = selectedLat.toString()
                 lng = selectedLng.toString()
@@ -423,9 +405,7 @@ fun AddPlaceDialog(
 
     Dialog(onDismissRequest = onDismiss) {
         Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .wrapContentHeight(),
+            modifier = Modifier.fillMaxWidth().wrapContentHeight(),
             shape = RoundedCornerShape(16.dp)
         ) {
             Column(
@@ -435,60 +415,56 @@ fun AddPlaceDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text(
-                    text = "Add New Place",
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFFB13334)
-                )
+                Text("Add New Place", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color(0xFFB13334))
 
                 OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text("Name") },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isLoading
+                    value = name, onValueChange = { name = it },
+                    label = { Text("Name") }, modifier = Modifier.fillMaxWidth(), enabled = !isLoading
                 )
 
-                OutlinedTextField(
-                    value = category,
-                    onValueChange = { category = it },
-                    label = { Text("Category") },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isLoading
-                )
+                // AANPASSING: Dropdown Menu voor Categorie
+                ExposedDropdownMenuBox(
+                    expanded = expandedCategory,
+                    onExpandedChange = { expandedCategory = it }
+                ) {
+                    OutlinedTextField(
+                        value = category,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Category") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCategory) },
+                        modifier = Modifier.fillMaxWidth().menuAnchor(),
+                        colors = OutlinedTextFieldDefaults.colors()
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expandedCategory,
+                        onDismissRequest = { expandedCategory = false }
+                    ) {
+                        categories.forEach { selection ->
+                            DropdownMenuItem(
+                                text = { Text(selection) },
+                                onClick = {
+                                    category = selection
+                                    expandedCategory = false
+                                }
+                            )
+                        }
+                    }
+                }
 
                 Column {
                     Text("Rating: ${rating.toInt()}/5", fontSize = 14.sp)
-                    Slider(
-                        value = rating,
-                        onValueChange = { rating = it },
-                        valueRange = 0f..5f,
-                        steps = 4,
-                        enabled = !isLoading
-                    )
+                    Slider(value = rating, onValueChange = { rating = it }, valueRange = 0f..5f, steps = 4, enabled = !isLoading)
                 }
 
                 OutlinedTextField(
-                    value = comment,
-                    onValueChange = { comment = it },
-                    label = { Text("Comment") },
-                    modifier = Modifier.fillMaxWidth(),
-                    maxLines = 3,
-                    enabled = !isLoading
+                    value = comment, onValueChange = { comment = it },
+                    label = { Text("Comment") }, modifier = Modifier.fillMaxWidth(), maxLines = 3, enabled = !isLoading
                 )
 
-                // Location Section
-                Text(
-                    text = "Location",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
+                // --- Location Section ---
+                Text("Location", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Switch(
                         checked = useCurrentLocation,
                         onCheckedChange = {
@@ -497,111 +473,54 @@ fun AddPlaceDialog(
                                 if (LocationUtils.hasLocationPermission(context)) {
                                     viewModel.viewModelScope.launch {
                                         val location = LocationUtils.getCurrentLatLng(context)
-                                        location?.let {
-                                            lat = it.latitude.toString()
-                                            lng = it.longitude.toString()
-                                        }
+                                        location?.let { lat = it.latitude.toString(); lng = it.longitude.toString() }
                                     }
                                 } else {
                                     locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
                                 }
                             }
-                        },
-                        enabled = !isLoading
+                        }, enabled = !isLoading
                     )
-                    Text("Use my current location")
+                    Text("Use my current location", fontSize = 12.sp)
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedTextField(
-                        value = lat,
-                        onValueChange = { lat = it },
-                        label = { Text("Latitude") },
-                        modifier = Modifier.weight(1f),
-                        enabled = !isLoading && !useCurrentLocation
-                    )
-                    OutlinedTextField(
-                        value = lng,
-                        onValueChange = { lng = it },
-                        label = { Text("Longitude") },
-                        modifier = Modifier.weight(1f),
-                        enabled = !isLoading && !useCurrentLocation
-                    )
-                }
-
-                Button(
-                    onClick = { showMapPicker = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isLoading
-                ) {
-                    Text("Pick location on map")
-                }
-
-                // Photo Section
-                Text(
-                    text = "Photo",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = { imagePickerLauncher.launch("image/*") },
-                        modifier = Modifier.weight(1f),
-                        enabled = !isLoading
-                    ) {
-                        Text("Gallery")
+                if (!useCurrentLocation) {
+                    Button(onClick = { showMapPicker = true }, modifier = Modifier.fillMaxWidth(), enabled = !isLoading) {
+                        Text("Pick location on map")
                     }
+                }
 
-                    Button(
-                        onClick = {
-                            if (context.checkSelfPermission(Manifest.permission.CAMERA) ==
-                                android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                                cameraLauncher.launch(cameraUri)
-                            } else {
-                                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                            }
-                        },
-                        modifier = Modifier.weight(1f),
-                        enabled = !isLoading
-                    ) {
-                        Text("Camera")
-                    }
+                // Coordinates display (optioneel, maar handig voor debug)
+                if (lat.isNotEmpty() && lng.isNotEmpty()) {
+                    Text("Lat: ${lat.take(7)}, Lng: ${lng.take(7)}", fontSize = 12.sp, color = Color.Gray)
+                }
+
+                // --- Photo Section ---
+                Text("Photo", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = { imagePickerLauncher.launch("image/*") }, modifier = Modifier.weight(1f), enabled = !isLoading) { Text("Gallery") }
+                    Button(onClick = {
+                        if (context.checkSelfPermission(Manifest.permission.CAMERA) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                            cameraLauncher.launch(cameraUri)
+                        } else {
+                            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+                        }
+                    }, modifier = Modifier.weight(1f), enabled = !isLoading) { Text("Camera") }
                 }
 
                 if (photoUri != null) {
-                    Text(
-                        text = "✓ Photo selected",
-                        color = Color(0xFF4CAF50),
-                        fontSize = 14.sp
-                    )
+                    Text("✓ Photo selected", color = Color(0xFF4CAF50), fontSize = 14.sp)
                 }
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    TextButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.weight(1f),
-                        enabled = !isLoading
-                    ) {
-                        Text("Cancel")
-                    }
-
+                // --- Action Buttons ---
+                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = onDismiss, modifier = Modifier.weight(1f), enabled = !isLoading) { Text("Cancel") }
                     Button(
                         onClick = {
                             val latitude = lat.toDoubleOrNull()
                             val longitude = lng.toDoubleOrNull()
 
-                            if (name.isNotBlank() && category.isNotBlank() &&
-                                latitude != null && longitude != null) {
+                            if (name.isNotBlank() && latitude != null && longitude != null) {
                                 val place = Place(
                                     name = name,
                                     category = category,
@@ -617,30 +536,16 @@ fun AddPlaceDialog(
                                     photoUri = photoUri,
                                     context = context,
                                     onSuccess = { onDismiss() },
-                                    onError = { error ->
-                                        Toast.makeText(context, error, Toast.LENGTH_SHORT).show()
-                                    }
+                                    onError = { error -> Toast.makeText(context, error, Toast.LENGTH_SHORT).show() }
                                 )
                             } else {
-                                Toast.makeText(
-                                    context,
-                                    "Please fill all required fields",
-                                    Toast.LENGTH_SHORT
-                                ).show()
+                                Toast.makeText(context, "Please fill name and location", Toast.LENGTH_SHORT).show()
                             }
                         },
                         modifier = Modifier.weight(1f),
                         enabled = !isLoading
                     ) {
-                        if (isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(20.dp),
-                                color = Color.White,
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Text("Add")
-                        }
+                        if (isLoading) CircularProgressIndicator(modifier = Modifier.size(20.dp), color = Color.White, strokeWidth = 2.dp) else Text("Add")
                     }
                 }
             }

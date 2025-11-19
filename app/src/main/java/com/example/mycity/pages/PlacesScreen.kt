@@ -340,7 +340,9 @@ fun AddPlaceDialog(
     onDismiss: () -> Unit
 ) {
     var name by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf("") }
+    val categories = listOf("Restaurant", "Monument", "Park", "Winkel", "Bar", "Museum", "Woonzorgcentrum", "Space-station","Anders")
+    var category by remember { mutableStateOf(categories.first()) }
+    var expandedCategory by remember { mutableStateOf(false) }
     var rating by remember { mutableStateOf(0f) }
     var comment by remember { mutableStateOf("") }
     var photoUri by remember { mutableStateOf<Uri?>(null) }
@@ -348,7 +350,6 @@ fun AddPlaceDialog(
     var lng by remember { mutableStateOf("") }
     var useCurrentLocation by remember { mutableStateOf(false) }
     var showMapPicker by remember { mutableStateOf(false) }
-    var showPhotoOptions by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val isLoading by viewModel.isLoading.collectAsState()

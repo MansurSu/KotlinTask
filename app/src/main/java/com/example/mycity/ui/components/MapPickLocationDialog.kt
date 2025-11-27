@@ -11,13 +11,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.osmdroid.bonuspack.location.GeocoderNominatim
 import org.osmdroid.config.Configuration
+import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
-import org.osmdroid.views.overlay.Marker
-import org.osmdroid.events.MapEventsReceiver
 import org.osmdroid.views.overlay.MapEventsOverlay
+import org.osmdroid.views.overlay.Marker
 
 @Composable
 fun MapPickLocationDialog(
@@ -29,6 +33,7 @@ fun MapPickLocationDialog(
     var selectedLat by remember { mutableStateOf(initialLat) }
     var selectedLng by remember { mutableStateOf(initialLng) }
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
 
     DisposableEffect(Unit) {
         Configuration.getInstance().userAgentValue = context.packageName
@@ -57,20 +62,46 @@ fun MapPickLocationDialog(
                                 setMultiTouchControls(true)
 
                                 controller.setZoom(18.5)
-                                controller.setCenter(GeoPoint(initialLat, initialLng))
+                                val startPoint = GeoPoint(initialLat, initialLng)
+                                controller.setCenter(startPoint)
 
-                                val marker = Marker(this).apply {
-                                    position = GeoPoint(initialLat, initialLng)
+                                val marker = Marker(this)
+
+                                fun updateMarkerAddress(point: GeoPoint) {
+                                    marker.title = "Loading address..."
+                                    marker.showInfoWindow()
+                                    coroutineScope.launch(Dispatchers.IO) {
+                                        val geocoder = GeocoderNominatim(ctx.packageName)
+                                        try {
+                                            val addresses = geocoder.getFromLocation(point.latitude, point.longitude, 1)
+                                            withContext(Dispatchers.Main) {
+                                                if (addresses.isNotEmpty()) {
+                                                    marker.title = addresses[0].getAddressLine(0)
+                                                } else {
+                                                    marker.title = "Address not found"
+                                                }
+                                                marker.showInfoWindow()
+                                            }
+                                        } catch (e: Exception) {
+                                            withContext(Dispatchers.Main) {
+                                                marker.title = "Could not find address"
+                                                marker.showInfoWindow()
+                                            }
+                                        }
+                                    }
+                                }
+
+                                marker.apply {
+                                    position = startPoint
                                     setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                                     isDraggable = true
-                                    title = "Geselecteerde locatie"
-
                                     setOnMarkerDragListener(object : Marker.OnMarkerDragListener {
                                         override fun onMarkerDrag(marker: Marker?) {}
                                         override fun onMarkerDragEnd(marker: Marker?) {
                                             marker?.let {
                                                 selectedLat = it.position.latitude
                                                 selectedLng = it.position.longitude
+                                                updateMarkerAddress(it.position)
                                             }
                                         }
                                         override fun onMarkerDragStart(marker: Marker?) {}
@@ -87,6 +118,7 @@ fun MapPickLocationDialog(
                                             marker.position = point
 
                                             invalidate()
+                                            updateMarkerAddress(point)
                                         }
                                         return true
                                     }
@@ -100,6 +132,8 @@ fun MapPickLocationDialog(
                                 overlays.add(eventsOverlay)
 
                                 overlays.add(marker)
+
+                                updateMarkerAddress(startPoint)
                             }
                         },
                         modifier = Modifier.fillMaxSize()

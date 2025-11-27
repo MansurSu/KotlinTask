@@ -1,17 +1,22 @@
 package com.example.mycity.ui.screens
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
 import com.example.mycity.viewmodel.CityViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddCityScreen(
+    navController: NavController,
     onCityAdded: () -> Unit = {}
 ) {
     val cityViewModel: CityViewModel = viewModel()
@@ -22,7 +27,18 @@ fun AddCityScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(title = { Text("Add City") })
+            TopAppBar(
+                title = { Text("Add City") },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color(0xFFB13334),
+                    titleContentColor = Color.White
+                )
+            )
         }
     ) { padding ->
         Column(

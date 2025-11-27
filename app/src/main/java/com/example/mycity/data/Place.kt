@@ -7,6 +7,7 @@ data class Place(
     val category: String = "",
     val lat: Double = 0.0,
     val lng: Double = 0.0,
+    val address: String = "",
     val rating: Float = 0f,
     val comment: String = "",
     val photoUrl: String = "",

@@ -57,6 +57,7 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.5.0")
     implementation("com.google.android.gms:play-services-location:21.0.1")
     implementation("org.osmdroid:osmdroid-android:6.1.18")
+    implementation("com.github.MKergall:osmbonuspack:6.9.0")
 
     // Firebase Firestore
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))

@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
@@ -24,21 +25,21 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
+import androidx.navigation.compose.rememberNavController
 import com.example.mycity.model.Place
 import com.example.mycity.utils.ImageUtils
 import com.example.mycity.viewmodel.PlacesViewModel
-import kotlin.text.category
-import kotlin.text.toInt
 import android.Manifest
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewModelScope
-import com.example.mycity.ui.components.MapPickLocationDialog
 import com.example.mycity.utils.LocationUtils
 import kotlinx.coroutines.launch
 import org.osmdroid.config.Configuration
@@ -46,8 +47,9 @@ import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
-import kotlin.text.toInt
-import kotlin.toString
+import org.osmdroid.bonuspack.location.GeocoderNominatim
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,7 +57,8 @@ fun PlacesScreen(
     cityId: String,
     cityName: String,
     modifier: Modifier = Modifier,
-    viewModel: PlacesViewModel = viewModel()
+    viewModel: PlacesViewModel = viewModel(),
+    navController: NavController? = null
 ) {
     val places by viewModel.filteredPlaces.collectAsState()
     val selectedCategory by viewModel.selectedCategory.collectAsState()
@@ -78,9 +81,17 @@ fun PlacesScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Places in $cityName") },
+                navigationIcon = {
+                    if (navController != null) {
+                        IconButton(onClick = { navController.popBackStack() }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color(0xFFB13334),
-                    titleContentColor = Color.White
+                    titleContentColor = Color.White,
+                    navigationIconContentColor = Color.White
                 )
             )
         },
@@ -300,6 +311,17 @@ fun PlaceCard(place: Place) {
                     color = Color.Gray
                 )
 
+                Spacer(modifier = Modifier.height(4.dp))
+
+                if (place.address.isNotEmpty()) {
+                    Text(
+                        text = place.address,
+                        fontSize = 12.sp,
+                        color = Color.DarkGray,
+                        maxLines = 2
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(8.dp))
 
                 // Rating
@@ -350,11 +372,9 @@ fun AddPlaceDialog(
     var comment by remember { mutableStateOf("") }
     var photoUri by remember { mutableStateOf<Uri?>(null) }
 
-    // Lat/Lng logica behouden...
-    var lat by remember { mutableStateOf("") }
-    var lng by remember { mutableStateOf("") }
-    var useCurrentLocation by remember { mutableStateOf(false) }
-    var showMapPicker by remember { mutableStateOf(false) }
+    var address by remember { mutableStateOf("") }
+    var lat by remember { mutableStateOf(0.0) }
+    var lng by remember { mutableStateOf(0.0) }
 
     val context = LocalContext.current
     val isLoading by viewModel.isLoading.collectAsState()
@@ -384,23 +404,26 @@ fun AddPlaceDialog(
         if (isGranted) {
             viewModel.viewModelScope.launch {
                 val location = LocationUtils.getCurrentLatLng(context)
-                location?.let { lat = it.latitude.toString(); lng = it.longitude.toString() }
+                location?.let { 
+                    lat = it.latitude
+                    lng = it.longitude
+                    // Reverse geocode to get address
+                    withContext(Dispatchers.IO) {
+                        val geocoder = GeocoderNominatim(context.packageName)
+                        try {
+                            val addresses = geocoder.getFromLocation(lat, lng, 1)
+                            if (addresses.isNotEmpty()) {
+                                address = addresses[0].getAddressLine(0)
+                            } else {
+                                address = "Address not found"
+                            }
+                        } catch (e: Exception) {
+                            address = "Could not find address"
+                        }
+                    }
+                }
             }
         }
-    }
-
-    if (showMapPicker) {
-        MapPickLocationDialog(
-            initialLat = lat.toDoubleOrNull() ?: 51.2,
-            initialLng = lng.toDoubleOrNull() ?: 4.4,
-            onLocationSelected = { selectedLat, selectedLng ->
-                lat = selectedLat.toString()
-                lng = selectedLng.toString()
-                showMapPicker = false
-            },
-            onDismiss = { showMapPicker = false }
-        )
-        return
     }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -422,7 +445,6 @@ fun AddPlaceDialog(
                     label = { Text("Name") }, modifier = Modifier.fillMaxWidth(), enabled = !isLoading
                 )
 
-                // AANPASSING: Dropdown Menu voor Categorie
                 ExposedDropdownMenuBox(
                     expanded = expandedCategory,
                     onExpandedChange = { expandedCategory = it }
@@ -464,35 +486,45 @@ fun AddPlaceDialog(
 
                 // --- Location Section ---
                 Text("Location", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Switch(
-                        checked = useCurrentLocation,
-                        onCheckedChange = {
-                            useCurrentLocation = it
-                            if (it) {
-                                if (LocationUtils.hasLocationPermission(context)) {
-                                    viewModel.viewModelScope.launch {
-                                        val location = LocationUtils.getCurrentLatLng(context)
-                                        location?.let { lat = it.latitude.toString(); lng = it.longitude.toString() }
+
+                if (address.isNotEmpty()) {
+                     OutlinedTextField(
+                        value = address,
+                        onValueChange = { address = it },
+                        label = { Text("Address") },
+                        modifier = Modifier.fillMaxWidth(),
+                        readOnly = true
+                    )
+                }
+
+                Button(onClick = { 
+                     if (LocationUtils.hasLocationPermission(context)) {
+                        viewModel.viewModelScope.launch {
+                            val location = LocationUtils.getCurrentLatLng(context)
+                            location?.let { 
+                                lat = it.latitude
+                                lng = it.longitude
+                                // Reverse geocode to get address
+                                withContext(Dispatchers.IO) {
+                                    val geocoder = GeocoderNominatim(context.packageName)
+                                    try {
+                                        val addresses = geocoder.getFromLocation(lat, lng, 1)
+                                        if (addresses.isNotEmpty()) {
+                                            address = addresses[0].getAddressLine(0)
+                                        } else {
+                                            address = "Address not found"
+                                        }
+                                    } catch (e: Exception) {
+                                        address = "Could not find address"
                                     }
-                                } else {
-                                    locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
                                 }
                             }
-                        }, enabled = !isLoading
-                    )
-                    Text("Use my current location", fontSize = 12.sp)
-                }
-
-                if (!useCurrentLocation) {
-                    Button(onClick = { showMapPicker = true }, modifier = Modifier.fillMaxWidth(), enabled = !isLoading) {
-                        Text("Pick location on map")
+                        }
+                    } else {
+                        locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
                     }
-                }
-
-                // Coordinates display (optioneel, maar handig voor debug)
-                if (lat.isNotEmpty() && lng.isNotEmpty()) {
-                    Text("Lat: ${lat.take(7)}, Lng: ${lng.take(7)}", fontSize = 12.sp, color = Color.Gray)
+                }, modifier = Modifier.fillMaxWidth(), enabled = !isLoading) {
+                    Text("Get Current Address")
                 }
 
                 // --- Photo Section ---
@@ -517,17 +549,15 @@ fun AddPlaceDialog(
                     TextButton(onClick = onDismiss, modifier = Modifier.weight(1f), enabled = !isLoading) { Text("Cancel") }
                     Button(
                         onClick = {
-                            val latitude = lat.toDoubleOrNull()
-                            val longitude = lng.toDoubleOrNull()
-
-                            if (name.isNotBlank() && latitude != null && longitude != null) {
+                            if (name.isNotBlank() && lat != 0.0 && lng != 0.0) {
                                 val place = Place(
                                     name = name,
                                     category = category,
                                     rating = rating,
                                     comment = comment,
-                                    lat = latitude,
-                                    lng = longitude
+                                    lat = lat,
+                                    lng = lng,
+                                    address = address
                                 )
 
                                 viewModel.addPlace(
@@ -539,7 +569,7 @@ fun AddPlaceDialog(
                                     onError = { error -> Toast.makeText(context, error, Toast.LENGTH_SHORT).show() }
                                 )
                             } else {
-                                Toast.makeText(context, "Please fill name and location", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Please fill name and get location", Toast.LENGTH_SHORT).show()
                             }
                         },
                         modifier = Modifier.weight(1f),
@@ -553,3 +583,8 @@ fun AddPlaceDialog(
     }
 }
 
+@Preview(showBackground = true)
+@Composable
+fun PlacesScreenPreview() {
+    PlacesScreen(cityId = "1", cityName = "Preview City", navController = rememberNavController())
+}

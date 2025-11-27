@@ -10,6 +10,7 @@ import com.example.mycity.pages.LoginPage
 import com.example.mycity.pages.SignupPage
 import com.example.mycity.pages.WelcomePage
 import com.example.mycity.pages.PlacesScreen
+import com.example.mycity.ui.screens.AddCityScreen
 
 @Composable
 fun MyAppNavigation(modifier: Modifier = Modifier, authViewModel: AuthViewModel) {
@@ -22,7 +23,8 @@ fun MyAppNavigation(modifier: Modifier = Modifier, authViewModel: AuthViewModel)
         composable("home")    { HomePage(modifier, navController, authViewModel) }
 
         composable("addCity") {
-            com.example.mycity.ui.screens.AddCityScreen(
+            AddCityScreen(
+                navController = navController,
                 onCityAdded = {
                     navController.navigate("home") {
                         popUpTo("addCity") { inclusive = true }
@@ -38,7 +40,8 @@ fun MyAppNavigation(modifier: Modifier = Modifier, authViewModel: AuthViewModel)
             PlacesScreen(
                 cityId = cityId,
                 cityName = cityName,
-                modifier = modifier
+                modifier = modifier,
+                navController = navController
             )
         }
     }

@@ -44,12 +44,12 @@ class PlacesViewModel(
         _filteredPlaces.value = if (_selectedCategory.value == null) {
             _places.value
         } else {
-            _places.value.filter { it.category == _selectedCategory.value }
+            _places.value.filter { it.categories.contains(_selectedCategory.value) }
         }
     }
 
     fun getCategories(): List<String> {
-        return _places.value.map { it.category }.distinct().sorted()
+        return _places.value.flatMap { it.categories }.distinct().sorted()
     }
 
     fun addPlace(

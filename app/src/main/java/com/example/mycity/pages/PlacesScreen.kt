@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -176,7 +177,7 @@ fun PlacesScreen(
                                             position = GeoPoint(place.lat, place.lng)
                                             setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                                             title = place.name
-                                            snippet = "${place.category} - ${place.rating}★"
+                                            snippet = "${place.categories.joinToString(", ")} - ${place.rating}★"
                                         }
                                         overlays.add(marker)
                                     }
@@ -199,7 +200,7 @@ fun PlacesScreen(
                                         position = GeoPoint(place.lat, place.lng)
                                         setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                                         title = place.name
-                                        snippet = "${place.category} - ${place.rating}★"
+                                        snippet = "${place.categories.joinToString(", ")} - ${place.rating}★"
                                     }
                                     mapView.overlays.add(marker)
                                 }
@@ -261,7 +262,6 @@ fun PlaceCard(place: Place) {
         elevation = CardDefaults.cardElevation(4.dp)
     ) {
         Row {
-            // Photo - Using Base64
             val bitmap = remember(place.photoBase64) {
                 if (place.photoBase64.isNotEmpty()) {
                     ImageUtils.base64ToBitmap(place.photoBase64)
@@ -290,7 +290,6 @@ fun PlaceCard(place: Place) {
                 }
             }
 
-            // Details
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -306,7 +305,7 @@ fun PlaceCard(place: Place) {
                 Spacer(modifier = Modifier.height(4.dp))
 
                 Text(
-                    text = place.category,
+                    text = place.categories.joinToString(", "),
                     fontSize = 14.sp,
                     color = Color.Gray
                 )
@@ -324,7 +323,6 @@ fun PlaceCard(place: Place) {
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Rating
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     repeat(5) { index ->
                         Icon(
@@ -363,10 +361,8 @@ fun AddPlaceDialog(
     onDismiss: () -> Unit
 ) {
     var name by remember { mutableStateOf("") }
-
-    val categories = listOf("Restaurant", "Monument", "Park", "Winkel", "Bar", "Anders")
-    var category by remember { mutableStateOf(categories.first()) }
-    var expandedCategory by remember { mutableStateOf(false) }
+    val allCategories = listOf("Restaurant", "Monument", "Park", "Winkel", "Bar", "Anders")
+    val selectedCategories = remember { mutableStateListOf<String>() }
 
     var rating by remember { mutableStateOf(0f) }
     var comment by remember { mutableStateOf("") }
@@ -407,7 +403,6 @@ fun AddPlaceDialog(
                 location?.let { 
                     lat = it.latitude
                     lng = it.longitude
-                    // Reverse geocode to get address
                     withContext(Dispatchers.IO) {
                         val geocoder = GeocoderNominatim(context.packageName)
                         try {
@@ -445,31 +440,30 @@ fun AddPlaceDialog(
                     label = { Text("Name") }, modifier = Modifier.fillMaxWidth(), enabled = !isLoading
                 )
 
-                ExposedDropdownMenuBox(
-                    expanded = expandedCategory,
-                    onExpandedChange = { expandedCategory = it }
-                ) {
-                    OutlinedTextField(
-                        value = category,
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Category") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedCategory) },
-                        modifier = Modifier.fillMaxWidth().menuAnchor(),
-                        colors = OutlinedTextFieldDefaults.colors()
-                    )
-                    ExposedDropdownMenu(
-                        expanded = expandedCategory,
-                        onDismissRequest = { expandedCategory = false }
-                    ) {
-                        categories.forEach { selection ->
-                            DropdownMenuItem(
-                                text = { Text(selection) },
-                                onClick = {
-                                    category = selection
-                                    expandedCategory = false
+                Column {
+                    Text("Categories", fontWeight = FontWeight.Bold)
+                    allCategories.forEach { category ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    if (selectedCategories.contains(category)) {
+                                        selectedCategories.remove(category)
+                                    } else {
+                                        selectedCategories.add(category)
+                                    }
                                 }
-                            )
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Checkbox(checked = selectedCategories.contains(category), onCheckedChange = { isChecked ->
+                                if (isChecked) {
+                                    selectedCategories.add(category)
+                                } else {
+                                    selectedCategories.remove(category)
+                                }
+                            })
+                            Text(text = category, modifier = Modifier.padding(start = 8.dp))
                         }
                     }
                 }
@@ -484,7 +478,6 @@ fun AddPlaceDialog(
                     label = { Text("Comment") }, modifier = Modifier.fillMaxWidth(), maxLines = 3, enabled = !isLoading
                 )
 
-                // --- Location Section ---
                 Text("Location", fontWeight = FontWeight.Bold, fontSize = 16.sp)
 
                 if (address.isNotEmpty()) {
@@ -504,7 +497,6 @@ fun AddPlaceDialog(
                             location?.let { 
                                 lat = it.latitude
                                 lng = it.longitude
-                                // Reverse geocode to get address
                                 withContext(Dispatchers.IO) {
                                     val geocoder = GeocoderNominatim(context.packageName)
                                     try {
@@ -527,7 +519,6 @@ fun AddPlaceDialog(
                     Text("Get Current Address")
                 }
 
-                // --- Photo Section ---
                 Text("Photo", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { imagePickerLauncher.launch("image/*") }, modifier = Modifier.weight(1f), enabled = !isLoading) { Text("Gallery") }
@@ -544,15 +535,14 @@ fun AddPlaceDialog(
                     Text("✓ Photo selected", color = Color(0xFF4CAF50), fontSize = 14.sp)
                 }
 
-                // --- Action Buttons ---
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = onDismiss, modifier = Modifier.weight(1f), enabled = !isLoading) { Text("Cancel") }
                     Button(
                         onClick = {
-                            if (name.isNotBlank() && lat != 0.0 && lng != 0.0) {
+                            if (name.isNotBlank() && selectedCategories.isNotEmpty() && lat != 0.0 && lng != 0.0) {
                                 val place = Place(
                                     name = name,
-                                    category = category,
+                                    categories = selectedCategories.toList(),
                                     rating = rating,
                                     comment = comment,
                                     lat = lat,
@@ -569,7 +559,7 @@ fun AddPlaceDialog(
                                     onError = { error -> Toast.makeText(context, error, Toast.LENGTH_SHORT).show() }
                                 )
                             } else {
-                                Toast.makeText(context, "Please fill name and get location", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "Please fill name, get location and select at least one category", Toast.LENGTH_SHORT).show()
                             }
                         },
                         modifier = Modifier.weight(1f),

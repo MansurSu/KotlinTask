@@ -12,6 +12,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.mycity.viewmodel.CityViewModel
+import kotlinx.coroutines.launch // Import coroutine launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -22,10 +23,27 @@ fun AddCityScreen(
     val cityViewModel: CityViewModel = viewModel()
     val error by cityViewModel.error.collectAsState()
 
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
     var cityName by remember { mutableStateOf("") }
     var country by remember { mutableStateOf("") }
 
+    LaunchedEffect(error) {
+        error?.let { errorMessage ->
+            scope.launch {
+                snackbarHostState.showSnackbar(
+                    message = errorMessage,
+                    actionLabel = "DISMISS",
+                    duration = SnackbarDuration.Long
+                )
+            }
+            cityViewModel.clearError()
+        }
+    }
+
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = { Text("Add City") },
@@ -63,22 +81,14 @@ fun AddCityScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            if (error != null) {
-                Text(
-                    text = error ?: "",
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-
             Button(
                 onClick = {
                     if (cityName.isNotBlank()) {
                         cityViewModel.addCity(
                             name = cityName,
-                            country = country
+                            country = country,
+                            onSuccess = onCityAdded
                         )
-                        onCityAdded()
                     }
                 },
                 modifier = Modifier.fillMaxWidth(),

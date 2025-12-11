@@ -35,6 +35,10 @@ class CityViewModel(
     val error: StateFlow<String?> = _error
 
     private var listenerAttached = false
+    
+    fun clearError() {
+        _error.value = null
+    }
 
     fun loadCities() {
         if (listenerAttached) return
@@ -80,28 +84,35 @@ class CityViewModel(
         }
 
         viewModelScope.launch {
-            _isLoading.value = true
-            try {
-                val uid = auth.currentUser?.uid.orEmpty()
-                val cityId = UUID.randomUUID().toString()
-                val data = hashMapOf(
-                    "name" to name.trim(),
-                    "country" to country?.trim().orEmpty(),
-                    "createdByUid" to uid,
-                    "createdAt" to System.currentTimeMillis()
-                )
-                firestore.collection("cities")
-                    .document(cityId)
-                    .set(data)
-                    .await()
-                _error.value = null
-                onSuccess()
-            } catch (e: Exception) {
-                val msg = e.message ?: "Failed to add city"
-                _error.value = msg
-                onError(msg)
-            } finally {
-                _isLoading.value = false
+            val cities = firestore.collection("cities")
+                .orderBy("createdAt", Query.Direction.DESCENDING).get().await()
+            if(cities.documents.any { it.getString("name")?.equals(name, ignoreCase = true) == true }) {
+                _error.value = "City with the same name already exists"
+                onError("City with the same name already exists")
+            } else {
+                _isLoading.value = true
+                try {
+                    val uid = auth.currentUser?.uid.orEmpty()
+                    val cityId = UUID.randomUUID().toString()
+                    val data = hashMapOf(
+                        "name" to name.trim(),
+                        "country" to country?.trim().orEmpty(),
+                        "createdByUid" to uid,
+                        "createdAt" to System.currentTimeMillis()
+                    )
+                    firestore.collection("cities")
+                        .document(cityId)
+                        .set(data)
+                        .await()
+                    _error.value = null
+                    onSuccess()
+                } catch (e: Exception) {
+                    val msg = e.message ?: "Failed to add city"
+                    _error.value = msg
+                    onError(msg)
+                } finally {
+                    _isLoading.value = false
+                }
             }
         }
     }

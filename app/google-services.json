@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "612805356201",
-    "project_id": "mycity-a3121",
-    "storage_bucket": "mycity-a3121.firebasestorage.app"
+    "project_number": "741426484975",
+    "project_id": "city-app-f8ec0",
+    "storage_bucket": "city-app-f8ec0.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:612805356201:android:09fd6f36dedaa2ebee97b8",
+        "mobilesdk_app_id": "1:741426484975:android:c0d984f70fa958a0b86d1a",
         "android_client_info": {
           "package_name": "com.example.mycity"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyC91hAjtjA79bb084ipJ3qOU93IvItt51o"
+          "current_key": "AIzaSyDYmO3bby3g7AEzRRr7-WkjWrcscD5axNM"
         }
       ],
       "services": {

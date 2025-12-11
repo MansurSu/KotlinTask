@@ -6,17 +6,13 @@ import com.example.mycity.model.Place
 import com.example.mycity.utils.ImageUtils
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
-import com.google.firebase.storage.FirebaseStorage
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
-import java.util.UUID
-import kotlin.text.category
 
 class PlacesRepository {
     private val firestore = FirebaseFirestore.getInstance()
-    private val storage = FirebaseStorage.getInstance()
 
     fun getPlaces(cityId: String): Flow<List<Place>> = callbackFlow {
         val listenerRegistration = firestore
@@ -35,7 +31,10 @@ class PlacesRepository {
                         id = doc.id,
                         cityId = cityId,
                         name = doc.getString("name").orEmpty(),
-                        category = doc.getString("category").orEmpty(),
+
+                        // ✅ FIX: Read categories correctly
+                        categories = doc.get("categories") as? List<String> ?: emptyList(),
+
                         lat = doc.getDouble("lat") ?: 0.0,
                         lng = doc.getDouble("lng") ?: 0.0,
                         rating = doc.getDouble("rating")?.toFloat() ?: 0f,
@@ -59,7 +58,7 @@ class PlacesRepository {
         context: Context
     ): Result<String> {
         return try {
-            // Convert photo to Base64 instead of uploading to Storage
+            // Convert image to Base64
             val photoBase64 = photoUri?.let {
                 ImageUtils.uriToBase64(context, it)
             } ?: ""
@@ -67,13 +66,16 @@ class PlacesRepository {
             val placeData = hashMapOf(
                 "cityId" to cityId,
                 "name" to place.name,
-                "category" to place.category,
+
+                // ✅ FIX: Save MULTIPLE categories
+                "categories" to place.categories,
+
                 "lat" to place.lat,
                 "lng" to place.lng,
                 "rating" to place.rating,
                 "comment" to place.comment,
-                "photoBase64" to photoBase64, // Use Base64
-                "photoUrl" to "", // Empty string
+                "photoBase64" to photoBase64,
+                "photoUrl" to "",
                 "createdAt" to System.currentTimeMillis()
             )
 
@@ -90,6 +92,23 @@ class PlacesRepository {
         }
     }
 
+    suspend fun doesPlaceNameExist(cityID: String, placeName: String): Boolean {
+        return try {
+            val snapshot = firestore
+                .collection("cities")
+                .document(cityID)
+                .collection("places")
+                .whereEqualTo("name", placeName)
+                .limit(1)
+                .get()
+                .await()
+
+            !snapshot.isEmpty
+        } catch (e: Exception) {
+            println("Error checking place name existence: ${e.message}")
+            false
+        }
+    }
 
     suspend fun updatePlace(
         cityId: String,
@@ -105,7 +124,10 @@ class PlacesRepository {
 
             val updates = hashMapOf(
                 "name" to place.name,
-                "category" to place.category,
+
+                // ✅ FIX: Update categories list
+                "categories" to place.categories,
+
                 "lat" to place.lat,
                 "lng" to place.lng,
                 "rating" to place.rating,
@@ -127,7 +149,6 @@ class PlacesRepository {
         }
     }
 
-
     suspend fun deletePlace(cityId: String, placeId: String): Result<Unit> {
         return try {
             firestore
@@ -143,5 +164,4 @@ class PlacesRepository {
             Result.failure(e)
         }
     }
-
 }

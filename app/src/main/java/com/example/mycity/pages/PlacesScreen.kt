@@ -51,6 +51,8 @@ import org.osmdroid.views.overlay.Marker
 import org.osmdroid.bonuspack.location.GeocoderNominatim
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import android.location.Location
+import com.example.mycity.utils.LatLng
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -68,9 +70,31 @@ fun PlacesScreen(
     var showAddDialog by remember { mutableStateOf(false) }
     var expandedDropdown by remember { mutableStateOf(false) }
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
+    var currentLocation by remember { mutableStateOf<LatLng?>(null) }
+    val locationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            // Permission granted, fetch location now
+            scope.launch {
+                currentLocation = LocationUtils.getCurrentLatLng(context)
+                if (currentLocation == null) {
+                    Toast.makeText(context, "Location permission granted, but failed to fetch location (GPS off?).", Toast.LENGTH_LONG).show()
+                }
+            }
+        } else {
+            Toast.makeText(context, "Location permission denied. Cannot center map.", Toast.LENGTH_SHORT).show()
+        }
+    }
     LaunchedEffect(cityId) {
         viewModel.loadPlaces(cityId)
+        if (LocationUtils.hasLocationPermission(context)) {
+            currentLocation = LocationUtils.getCurrentLatLng(context)
+        } else {
+            locationPermissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
     }
 
     DisposableEffect(Unit) {
@@ -169,25 +193,18 @@ fun PlacesScreen(
                             MapView(ctx).apply {
                                 setTileSource(TileSourceFactory.MAPNIK)
                                 setMultiTouchControls(true)
-
-                                // Add markers for all places
-                                places.forEach { place ->
-                                    if (place.lat != 0.0 && place.lng != 0.0) {
-                                        val marker = Marker(this).apply {
-                                            position = GeoPoint(place.lat, place.lng)
-                                            setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
-                                            title = place.name
-                                            snippet = "${place.categories.joinToString(", ")} - ${place.rating}★"
-                                        }
-                                        overlays.add(marker)
-                                    }
-                                }
-
+                                val location = currentLocation
                                 // Center map on first place or default
-                                val firstPlace = places.firstOrNull { it.lat != 0.0 && it.lng != 0.0 }
-                                if (firstPlace != null) {
+                                if (location?.latitude != null && location?.longitude != null) {
+                                    controller.setCenter(GeoPoint(location.latitude, location.longitude))
                                     controller.setZoom(12.0)
-                                    controller.setCenter(GeoPoint(firstPlace.lat, firstPlace.lng))
+                                }
+                                else{
+                                    val firstPlace = places.firstOrNull { it.lat != 0.0 && it.lng != 0.0 }
+                                    if (firstPlace != null) {
+                                        controller.setZoom(12.0)
+                                        controller.setCenter(GeoPoint(firstPlace.lat, firstPlace.lng))
+                                    }
                                 }
                             }
                         },
@@ -196,11 +213,34 @@ fun PlacesScreen(
                             mapView.overlays.clear()
                             places.forEach { place ->
                                 if (place.lat != 0.0 && place.lng != 0.0) {
+                                    val location = currentLocation
+                                    val distanceText = location?.let { userLocation ->
+                                        // --- Calculation happens ONLY if 'location' is NOT null ---
+                                        val results = FloatArray(1)
+                                        Location.distanceBetween(
+                                            userLocation.latitude,
+                                            userLocation.longitude,
+                                            place.lat,
+                                            place.lng,
+                                            results
+                                        )
+                                        val distanceInMeters = results[0]
+
+                                        // Format the distance nicely (in km or meters)
+                                        if (distanceInMeters >= 1000) {
+                                            String.format("%.2f km", distanceInMeters / 1000)
+                                        } else {
+                                            String.format("%.0f m", distanceInMeters)
+                                        }
+                                    } ?: run {
+                                        // --- Default value if 'location' IS null (uses Elvis operator ?: ) ---
+                                        "Distance N/A"
+                                    }
                                     val marker = Marker(mapView).apply {
                                         position = GeoPoint(place.lat, place.lng)
                                         setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM)
                                         title = place.name
-                                        snippet = "${place.categories.joinToString(", ")} - ${place.rating}★"
+                                        snippet = "${place.categories.joinToString(", ")} - ${place.rating}★ - ${distanceText}"
                                     }
                                     mapView.overlays.add(marker)
                                 }
@@ -400,7 +440,7 @@ fun AddPlaceDialog(
         if (isGranted) {
             viewModel.viewModelScope.launch {
                 val location = LocationUtils.getCurrentLatLng(context)
-                location?.let { 
+                location?.let {
                     lat = it.latitude
                     lng = it.longitude
                     withContext(Dispatchers.IO) {
@@ -490,11 +530,11 @@ fun AddPlaceDialog(
                     )
                 }
 
-                Button(onClick = { 
+                Button(onClick = {
                      if (LocationUtils.hasLocationPermission(context)) {
                         viewModel.viewModelScope.launch {
                             val location = LocationUtils.getCurrentLatLng(context)
-                            location?.let { 
+                            location?.let {
                                 lat = it.latitude
                                 lng = it.longitude
                                 withContext(Dispatchers.IO) {
